@@ -53,6 +53,12 @@ export default function RootLayout({ children }: RootLayoutProps) {
               Client action
             </Link>
             <Link
+              to="/login/client-action-onsubmit"
+              className="text-zinc-500 hover:text-zinc-950"
+            >
+              Client action + onSubmit
+            </Link>
+            <Link
               to="/login/server-action"
               className="text-zinc-500 hover:text-zinc-950"
             >

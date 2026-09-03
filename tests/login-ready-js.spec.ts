@@ -40,3 +40,17 @@ for (const implementation of implementations) {
     await expect(page).toHaveURL(implementation.path);
   });
 }
+
+test('client action with onSubmit uses the hydrated submit handler', async ({
+  page,
+}) => {
+  await page.goto('/login/client-action-onsubmit');
+  await expect(page.locator('form')).toHaveAttribute('data-hydrated', 'true');
+  await fillLoginForm(page);
+
+  await page.getByRole('button', { name: 'Log in' }).click();
+
+  await expect(page.getByTestId('on-submit-invocations')).toHaveText('1');
+  await expect(page.getByTestId('client-action-invocations')).toHaveText('0');
+  await expect(page).toHaveURL('/login/client-action-onsubmit');
+});

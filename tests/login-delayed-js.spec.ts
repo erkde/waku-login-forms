@@ -91,6 +91,34 @@ test('client action replays submission after hydration', async ({ page }) => {
   }
 });
 
+test('client action with onSubmit records the replay path', async ({ page }) => {
+  const chunk = await holdFormChunk(page, 'LoginForm');
+
+  try {
+    const response = await page.goto('/login/client-action-onsubmit', {
+      waitUntil: 'commit',
+    });
+    await expectClientActionReplayBootstrap(response, true);
+    await chunk.blocked;
+    await expect(page.locator('form')).toBeVisible();
+    await expect(page.locator('form')).toHaveAttribute(
+      'data-hydrated',
+      'false',
+    );
+    await fillLoginForm(page);
+
+    await page.getByRole('button', { name: 'Log in' }).click();
+    await expectClientActionQueuedForReplay(page);
+    chunk.release();
+
+    await expect(page.getByTestId('client-action-invocations')).toHaveText('1');
+    await expect(page.getByTestId('on-submit-invocations')).toHaveText('0');
+    await expect(page).toHaveURL('/login/client-action-onsubmit');
+  } finally {
+    chunk.release();
+  }
+});
+
 test('server action progressively submits while hydration is delayed', async ({
   page,
 }) => {

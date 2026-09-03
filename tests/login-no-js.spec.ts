@@ -45,6 +45,20 @@ test('client action cannot submit without JavaScript', async ({ page }) => {
   await expect(page.getByRole('status')).toHaveCount(0);
 });
 
+test('client action with onSubmit cannot invoke either function without JavaScript', async ({
+  page,
+}) => {
+  await page.goto('/login/client-action-onsubmit');
+  await expect(page.locator('form')).toHaveAttribute('action', /^javascript:/);
+
+  await fillLoginForm(page);
+  await page.getByRole('button', { name: 'Log in' }).click();
+
+  await expect(page.getByTestId('on-submit-invocations')).toHaveText('0');
+  await expect(page.getByTestId('client-action-invocations')).toHaveText('0');
+  await expect(page).toHaveURL('/login/client-action-onsubmit');
+});
+
 test('server action progressively submits without JavaScript', async ({
   page,
 }) => {

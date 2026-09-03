@@ -13,6 +13,7 @@ export type LoginMode =
   | 'native-html'
   | 'on-submit'
   | 'client-action'
+  | 'client-action-on-submit'
   | 'server-action';
 
 type LoginFormProps = {
@@ -28,6 +29,9 @@ export default function LoginForm({ mode }: LoginFormProps) {
   }
   if (mode === 'client-action') {
     return <ClientActionForm />;
+  }
+  if (mode === 'client-action-on-submit') {
+    return <ClientActionOnSubmitForm />;
   }
   return <ServerActionForm />;
 }
@@ -80,6 +84,50 @@ const ClientActionForm = () => {
     <form className="space-y-5" data-hydrated={hydrated} action={login}>
       <LoginFields />
       {submitted && <LoginSuccess />}
+    </form>
+  );
+};
+
+const ClientActionOnSubmitForm = () => {
+  const hydrated = useHydrated();
+  const [onSubmitInvocations, setOnSubmitInvocations] = useState(0);
+  const [clientActionInvocations, setClientActionInvocations] = useState(0);
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    setOnSubmitInvocations((count) => count + 1);
+    event.preventDefault();
+  };
+
+  const login = (_formData: FormData) => {
+    setClientActionInvocations((count) => count + 1);
+  };
+
+  return (
+    <form
+      className="space-y-5"
+      data-hydrated={hydrated}
+      action={login}
+      onSubmit={handleSubmit}
+    >
+      <LoginFields />
+      <dl aria-label="Submission invocation counts" className="text-sm">
+        <div className="flex justify-between">
+          <dt>onSubmit invocations</dt>
+          <dd>
+            <output data-testid="on-submit-invocations">
+              {onSubmitInvocations}
+            </output>
+          </dd>
+        </div>
+        <div className="flex justify-between">
+          <dt>Client action invocations</dt>
+          <dd>
+            <output data-testid="client-action-invocations">
+              {clientActionInvocations}
+            </output>
+          </dd>
+        </div>
+      </dl>
     </form>
   );
 };
