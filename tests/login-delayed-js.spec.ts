@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test';
 import {
   expectClientActionReplayBootstrap,
-  expectClientActionReplayListener,
+  expectClientActionQueuedForReplay,
   fillLoginForm,
   holdFormChunk,
-  submitAndExpectNativePost,
+  nativeSuccessMessage,
+  submitFormAndCaptureNavigation,
   successMessage,
 } from './login-helpers';
 
@@ -24,13 +25,18 @@ test('native HTML form submits while hydration is delayed', async ({ page }) => 
     );
     await fillLoginForm(page);
 
-    await submitAndExpectNativePost(page);
+    const request = await submitFormAndCaptureNavigation(page);
+
+    expect(request.method()).toBe('POST');
+    expect(new URL(request.url()).pathname).toBe('/login-submit');
+    await expect(page).toHaveURL('/login-submit');
+    await expect(page.getByText(nativeSuccessMessage)).toBeVisible();
   } finally {
     chunk.release();
   }
 });
 
-test('onSubmit falls back to native submission before hydration', async ({
+test('onSubmit has only native browser behavior before hydration', async ({
   page,
 }) => {
   const chunk = await holdFormChunk(page, 'LoginForm');
@@ -48,7 +54,11 @@ test('onSubmit falls back to native submission before hydration', async ({
     );
     await fillLoginForm(page);
 
-    await submitAndExpectNativePost(page);
+    const request = await submitFormAndCaptureNavigation(page);
+
+    expect(request.method()).toBe('GET');
+    expect(new URL(request.url()).pathname).toBe('/login/onsubmit');
+    await expect(page).toHaveURL(request.url());
   } finally {
     chunk.release();
   }
@@ -64,7 +74,6 @@ test('client action replays submission after hydration', async ({ page }) => {
     await expectClientActionReplayBootstrap(response, true);
     await chunk.blocked;
     await expect(page.locator('form')).toBeVisible();
-    await expectClientActionReplayListener(page);
     await expect(page.locator('form')).toHaveAttribute(
       'data-hydrated',
       'false',
@@ -72,6 +81,7 @@ test('client action replays submission after hydration', async ({ page }) => {
     await fillLoginForm(page);
 
     await page.getByRole('button', { name: 'Log in' }).click();
+    await expectClientActionQueuedForReplay(page);
     chunk.release();
 
     await expect(page.getByRole('status')).toHaveText(successMessage);

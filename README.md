@@ -9,7 +9,7 @@ The project does not perform real authentication, it just exists to test the beh
 | Route                  | Form API                                              |
 | ---------------------- | ----------------------------------------------------- |
 | `/login/native-html`   | `<form action="/login-submit" method="post">`        |
-| `/login/onsubmit`      | Native POST fallback with `onSubmit={handleSubmit}`   |
+| `/login/onsubmit`      | `<form onSubmit={handleSubmit}>`                      |
 | `/login/client-action` | `<form action={clientAction}>`                        |
 | `/login/server-action` | `<form action={serverAction}>` using `useActionState` |
 
@@ -42,9 +42,11 @@ The test waits for the form to report `data-hydrated="true"` before submitting i
 | Implementation  | DOM ready (no JavaScript)                         | Form hydration delayed                                | Component hydrated               |
 | --------------- | ------------------------------------------------ | ----------------------------------------------------- | -------------------------------- |
 | Native HTML     | Native POST navigation                           | Native POST; no replay listener                        | Native POST navigation           |
-| `onSubmit`      | Native POST fallback                             | Native POST fallback; no replay listener               | Handler runs and renders success |
+| `onSubmit`      | Browser's default GET navigation                 | Default GET navigation; no replay listener              | Handler runs and renders success |
 | Client `action` | Submission is guarded and cannot complete        | Replay listener queues submission until hydration     | Action runs and renders success  |
 | Server action   | Progressively submits and renders success        | Progressive POST; no replay listener required          | Action runs and renders success  |
+
+The `onSubmit` form deliberately supplies no `action` or `method`. Event props are not represented in HTML, so until hydration the browser performs its default GET submission to the current URL.
 
 React renders a function-valued client action with an internal `javascript:throw new Error(...)` form action. Only that implementation receives the early replay listener: it recognizes the sentinel, prevents native submission, captures the form data, and replays the action after hydration. React does not emit this listener for the native HTML, `onSubmit`, or server-action forms.
 

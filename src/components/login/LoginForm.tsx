@@ -60,8 +60,6 @@ const OnSubmitForm = () => {
     <form
       className="space-y-5"
       data-hydrated={hydrated}
-      action="/login-submit"
-      method="post"
       onSubmit={handleSubmit}
     >
       <LoginFields />

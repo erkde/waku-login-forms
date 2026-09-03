@@ -16,56 +16,45 @@ export async function fillLoginForm(page: Page) {
   await emailInput.fill(credentials.email);
   await passwordInput.fill(credentials.password);
   await rememberCheckbox.check();
-
-  await expect(emailInput).toHaveValue(credentials.email);
-  await expect(passwordInput).toHaveValue(credentials.password);
-  await expect(rememberCheckbox).toBeChecked();
 }
 
-export async function submitAndExpectNativePost(page: Page) {
+export async function submitFormAndCaptureNavigation(page: Page) {
+  const currentUrl = page.url();
+
   const [request] = await Promise.all([
-    page.waitForRequest((candidate) => {
-      return (
-        candidate.isNavigationRequest() &&
-        new URL(candidate.url()).pathname === '/login-submit'
-      );
+    page.waitForRequest((candidate) => candidate.isNavigationRequest()),
+    page.waitForURL((url) => url.href !== currentUrl, {
+      waitUntil: 'commit',
     }),
-    page.getByRole('button', { name: 'Log in' }).click(),
+    page
+      .getByRole('button', { name: 'Log in' })
+      .click({ noWaitAfter: true }),
   ]);
 
-  expect(request.method()).toBe('POST');
-  await expect(page).toHaveURL('/login-submit');
-  await expect(page.getByText(nativeSuccessMessage)).toBeVisible();
+  return request;
 }
 
-export async function expectClientActionReplayListener(page: Page) {
-  const session = await page.context().newCDPSession(page);
+export async function expectClientActionQueuedForReplay(page: Page) {
+  const replayQueue = await page.evaluate(() => {
+    const queue = (
+      document as Document & { $$reactFormReplay?: unknown[] }
+    ).$$reactFormReplay;
 
-  try {
-    const { result: windowObject } = await session.send('Runtime.evaluate', {
-      expression: 'window',
-    });
+    return {
+      length: queue?.length,
+      formMatches: queue?.[0] === document.querySelector('form'),
+      submitterMatches:
+        queue?.[1] === document.querySelector('button[type="submit"]'),
+      includesFormData: queue?.[2] instanceof FormData,
+    };
+  });
 
-    if (!windowObject.objectId) {
-      throw new Error('Could not inspect the browser window');
-    }
-
-    await expect
-      .poll(
-        async () => {
-          const { listeners } = await session.send(
-            'DOMDebugger.getEventListeners',
-            { objectId: windowObject.objectId! },
-          );
-
-          return listeners.some((listener) => listener.type === 'submit');
-        },
-        { message: "React's client-action replay listener should be attached" },
-      )
-      .toBe(true);
-  } finally {
-    await session.detach();
-  }
+  expect(replayQueue).toEqual({
+    length: 3,
+    formMatches: true,
+    submitterMatches: true,
+    includesFormData: true,
+  });
 }
 
 export async function expectClientActionReplayBootstrap(

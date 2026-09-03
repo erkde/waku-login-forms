@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
 import {
   fillLoginForm,
-  submitAndExpectNativePost,
+  nativeSuccessMessage,
+  submitFormAndCaptureNavigation,
   successMessage,
 } from './login-helpers';
 
@@ -16,7 +17,12 @@ test('native HTML form submits after component hydration', async ({ page }) => {
   await expect(page.locator('form')).toHaveAttribute('data-hydrated', 'true');
   await fillLoginForm(page);
 
-  await submitAndExpectNativePost(page);
+  const request = await submitFormAndCaptureNavigation(page);
+
+  expect(request.method()).toBe('POST');
+  expect(new URL(request.url()).pathname).toBe('/login-submit');
+  await expect(page).toHaveURL('/login-submit');
+  await expect(page.getByText(nativeSuccessMessage)).toBeVisible();
 });
 
 for (const implementation of implementations) {

@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
 import {
   fillLoginForm,
-  submitAndExpectNativePost,
+  nativeSuccessMessage,
+  submitFormAndCaptureNavigation,
   successMessage,
 } from './login-helpers';
 
@@ -11,7 +12,12 @@ test('native HTML form submits at DOM ready', async ({ page }) => {
   await page.goto('/login/native-html');
   await fillLoginForm(page);
 
-  await submitAndExpectNativePost(page);
+  const request = await submitFormAndCaptureNavigation(page);
+
+  expect(request.method()).toBe('POST');
+  expect(new URL(request.url()).pathname).toBe('/login-submit');
+  await expect(page).toHaveURL('/login-submit');
+  await expect(page.getByText(nativeSuccessMessage)).toBeVisible();
 });
 
 test('onSubmit uses native form behavior without JavaScript', async ({
@@ -20,14 +26,19 @@ test('onSubmit uses native form behavior without JavaScript', async ({
   await page.goto('/login/onsubmit');
   await fillLoginForm(page);
 
-  await submitAndExpectNativePost(page);
+  const request = await submitFormAndCaptureNavigation(page);
+
+  expect(request.method()).toBe('GET');
+  expect(new URL(request.url()).pathname).toBe('/login/onsubmit');
+  await expect(page).toHaveURL(request.url());
 });
 
 test('client action cannot submit without JavaScript', async ({ page }) => {
   await page.goto('/login/client-action');
+  await expect(page.locator('form')).toHaveAttribute('action', /^javascript:/);
+
   await fillLoginForm(page);
 
-  await expect(page.locator('form')).toHaveAttribute('action', /^javascript:/);
   await page.getByRole('button', { name: 'Log in' }).click();
 
   await expect(page).toHaveURL('/login/client-action');
