@@ -6,13 +6,13 @@ The project does not perform real authentication, it just exists to test the beh
 
 ## Login implementations
 
-| Route                           | Form API                                                               |
-| ------------------------------- | ---------------------------------------------------------------------- |
-| `/login/native-html`            | `<form action="/login-submit" method="post">`                         |
-| `/login/onsubmit`               | `<form onSubmit={handleSubmit}>`                                       |
-| `/login/client-action`          | `<form action={clientAction}>`                                         |
-| `/login/client-action-onsubmit` | `<form action={clientAction} onSubmit={handleSubmit}>`                  |
-| `/login/server-action`          | `<form action={serverAction}>` using `useActionState`                  |
+| Route                           | Form API                                               |
+| ------------------------------- | ------------------------------------------------------ |
+| `/login/native-html`            | `<form action="/login-submit" method="post">`          |
+| `/login/onsubmit`               | `<form onSubmit={handleSubmit}>`                       |
+| `/login/client-action`          | `<form action={clientAction}>`                         |
+| `/login/client-action-onsubmit` | `<form action={clientAction} onSubmit={handleSubmit}>` |
+| `/login/server-action`          | `<form action={serverAction}>` using `useActionState`  |
 
 All five routes render the same login form fields through a shared client component and application root.
 
@@ -32,25 +32,41 @@ At submission time:
 - The `LoginForm` component and its handlers have not hydrated.
 - For forms with a client `action`, Playwright verifies that React's early form-replay listener is attached.
 
-The client `action` can therefore be captured and replayed even though its component is not ready. The other implementations do not emit or rely on that replay listener.
-
 ### Ready JavaScript
 
 The test waits for the form to report `data-hydrated="true"` before submitting it.
 
 ## Results
 
-| Implementation             | DOM ready (no JavaScript)                  | Form hydration delayed                            | Component hydrated                       |
-| -------------------------- | ----------------------------------------- | ------------------------------------------------- | ---------------------------------------- |
-| Native HTML                | Native POST navigation                    | Native POST; no replay listener                    | Native POST navigation                   |
-| `onSubmit`                 | Browser's default GET navigation          | Default GET navigation; no replay listener         | Handler runs and renders success         |
-| Client `action`            | Submission is guarded and cannot complete | Replay queues and directly invokes the action      | Action runs and renders success          |
-| Client `action` + onSubmit | Neither function can run                  | Action runs; `onSubmit` does not                   | `onSubmit` runs and prevents the action  |
-| Server action              | Progressively submits and renders success | Progressive POST; no replay listener required      | Action runs and renders success          |
+| Implementation             | JavaScript disabled                       | Submitted before hydration                    | Submitted after hydration               |
+| -------------------------- | ----------------------------------------- | --------------------------------------------- | --------------------------------------- |
+| Native HTML                | Native POST navigation                    | Native POST; no replay listener               | Native POST navigation                  |
+| `onSubmit`                 | Browser's default GET navigation          | Default GET navigation; no replay listener    | Handler runs and renders success        |
+| Client `action`            | Submission is guarded and cannot complete | Replay queues and directly invokes the action | Action runs and renders success         |
+| Client `action` + onSubmit | Neither function can run                  | Action runs; `onSubmit` does not              | `onSubmit` runs and prevents the action |
+| Server action              | Progressively submits and renders success | Progressive POST; no replay listener required | Action runs and renders success         |
 
-The `onSubmit` form deliberately supplies no `action` or `method`. Event props are not represented in HTML, so until hydration the browser performs its default GET submission to the current URL.
+### Native HTML
 
-React renders a function-valued client action with an internal `javascript:throw new Error(...)` form action. Forms with that action receive the early replay listener: it recognizes the sentinel, prevents native submission, captures the form data, and invokes the queued action after hydration. In the combined case, the delayed submission calls the client action directly without invoking `onSubmit`; after ordinary hydration, the same submission invokes `onSubmit`, whose `preventDefault()` call stops the client action. React does not emit the replay listener for the native HTML, `onSubmit`-only, or server-action forms.
+The browser can submit this form in every scenario because its POST URL and method are present in the HTML. React hydration does not change its submission path, and no replay support is involved.
+
+### `onSubmit`
+
+Because an event handler is not represented in the server-rendered HTML, the browser performs its default GET submission when JavaScript is disabled or the component has not hydrated. Once hydrated, React can run the handler, which calls `preventDefault()` and renders the success state instead of navigating.
+
+### Client `action`
+
+React represents the function-valued action in HTML with an internal `javascript:throw new Error(...)` URL. With JavaScript disabled, that guard prevents the form from completing a native submission. During delayed hydration, React's early replay listener recognizes the guarded action, prevents navigation, and stores the form, submitter, and form data. After hydration it invokes the queued client action. When the component is already hydrated, the action runs through the normal React submission path.
+
+### Client `action` with `onSubmit`
+
+This form records the two callbacks independently. A submission made before hydration produces one client-action invocation and zero `onSubmit` invocations. A submission made after hydration does the reverse: `onSubmit` runs once, and its `preventDefault()` call keeps the client action at zero.
+
+That difference shows that hydration replay does not dispatch the complete submit path again. React invokes the queued client action directly, so event behavior placed only in `onSubmit` does not apply to a submission captured during the hydration gap.
+
+### Server action
+
+The server action is encoded as a progressively enhanced form submission, so it works with JavaScript disabled and while the client component is still waiting to hydrate. In the delayed case the browser POSTs to the server rather than adding an entry to React's client-action replay queue. After hydration, React handles the action without changing the visible result.
 
 ## Run locally
 
