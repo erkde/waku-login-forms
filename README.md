@@ -1,6 +1,6 @@
 # waku-login-forms
 
-A small Waku and React 19 experiment comparing how three form submission APIs behave with no JavaScript, delayed form hydration, and fully hydrated JavaScript.
+A small Waku and React 19 experiment comparing how four form submission APIs behave with no JavaScript, delayed form hydration, and fully hydrated JavaScript.
 
 The project does not perform real authentication, it just exists to test the behavior around React's hydration gap.
 
@@ -8,11 +8,12 @@ The project does not perform real authentication, it just exists to test the beh
 
 | Route                  | Form API                                              |
 | ---------------------- | ----------------------------------------------------- |
-| `/login/onsubmit`      | `<form onSubmit={handleSubmit}>`                      |
+| `/login/native-html`   | `<form action="/login-submit" method="post">`        |
+| `/login/onsubmit`      | Native POST fallback with `onSubmit={handleSubmit}`   |
 | `/login/client-action` | `<form action={clientAction}>`                        |
 | `/login/server-action` | `<form action={serverAction}>` using `useActionState` |
 
-All three routes render the same login form fields through a shared client component.
+All four routes render the same login form fields through a shared client component and application root.
 
 ## Test scenarios
 
@@ -22,15 +23,15 @@ Playwright disables JavaScript entirely. React cannot install listeners, hydrate
 
 ### Delayed form hydration
 
-The application runtime loads normally, but Playwright delays `LoginForm-*.js` by three seconds to simulate a form submission during hydration.
+The application runtime loads normally, but Playwright holds the `LoginForm-*.js` request to simulate a form submission during hydration. The test releases the chunk only after the submission has occurred.
 
 At submission time:
 
 - The server-rendered form is visible and interactive.
-- React's early form-replay listener is available.
 - The `LoginForm` component and its handlers have not hydrated.
+- For the client `action`, Playwright verifies that React's early form-replay listener is attached.
 
-React is capable of capturing supported interactions, but the component responsible for them is not ready yet.
+The client `action` can therefore be captured and replayed even though its component is not ready. The other implementations do not emit or rely on that replay listener.
 
 ### Ready JavaScript
 
@@ -38,15 +39,14 @@ The test waits for the form to report `data-hydrated="true"` before submitting i
 
 ## Results
 
-| Implementation  | No JavaScript                                    | Delayed form hydration                                | Ready JavaScript                 |
+| Implementation  | DOM ready (no JavaScript)                         | Form hydration delayed                                | Component hydrated               |
 | --------------- | ------------------------------------------------ | ----------------------------------------------------- | -------------------------------- |
-| `onSubmit`      | Native GET submission; credentials enter the URL | Native GET submission; credentials enter the URL      | Handler runs and renders success |
-| Client `action` | Submission is guarded and cannot complete        | Submission is queued and replayed after hydration     | Action runs and renders success  |
-| Server action   | Progressively submits and renders success        | Progressively submits while the form chunk is delayed | Action runs and renders success  |
+| Native HTML     | Native POST navigation                           | Native POST; no replay listener                        | Native POST navigation           |
+| `onSubmit`      | Native POST fallback                             | Native POST fallback; no replay listener               | Handler runs and renders success |
+| Client `action` | Submission is guarded and cannot complete        | Replay listener queues submission until hydration     | Action runs and renders success  |
+| Server action   | Progressively submits and renders success        | Progressive POST; no replay listener required          | Action runs and renders success  |
 
-The `onSubmit` form intentionally omits `method="post"` to verify the credential-leak risk of relying on a client handler for non-JS clients and during hydration.
-
-React renders a function-valued client action with an internal `javascript:throw new Error(...)` form action. Its early replay listener recognizes that sentinel, prevents native submission, captures the form data, and replays the action after hydration.
+React renders a function-valued client action with an internal `javascript:throw new Error(...)` form action. Only that implementation receives the early replay listener: it recognizes the sentinel, prevents native submission, captures the form data, and replays the action after hydration. React does not emit this listener for the native HTML, `onSubmit`, or server-action forms.
 
 ## Run locally
 
@@ -70,7 +70,7 @@ npm run start
 npm run test:e2e
 ```
 
-The test script builds the application first, then Playwright starts the production server on port 3100 and runs all nine combinations in Chromium.
+The test script builds the application first, then Playwright starts the production server on port 3100 and runs all twelve combinations in Chromium.
 
 To use Playwright UI:
 
@@ -89,8 +89,10 @@ src/
 │   ├── LoginFields.tsx
 │   └── LoginForm.tsx
 └── pages/
+    ├── _api/login-submit.ts
     ├── _layout.tsx
     └── login/
+        ├── native-html.tsx
         ├── onsubmit.tsx
         ├── client-action.tsx
         └── server-action.tsx

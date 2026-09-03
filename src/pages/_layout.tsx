@@ -35,6 +35,12 @@ export default function RootLayout({ children }: RootLayoutProps) {
             className="mt-7 flex flex-wrap justify-center gap-x-4 gap-y-2 text-sm"
           >
             <Link
+              to="/login/native-html"
+              className="text-zinc-500 hover:text-zinc-950"
+            >
+              Native HTML
+            </Link>
+            <Link
               to="/login/onsubmit"
               className="text-zinc-500 hover:text-zinc-950"
             >

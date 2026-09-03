@@ -9,13 +9,20 @@ import {
 import { submitLogin, type LoginState } from '../../actions/submit-login';
 import { LoginFields, LoginSuccess } from './LoginFields';
 
-export type LoginMode = 'on-submit' | 'client-action' | 'server-action';
+export type LoginMode =
+  | 'native-html'
+  | 'on-submit'
+  | 'client-action'
+  | 'server-action';
 
 type LoginFormProps = {
   mode: LoginMode;
 };
 
 export default function LoginForm({ mode }: LoginFormProps) {
+  if (mode === 'native-html') {
+    return <NativeHtmlForm />;
+  }
   if (mode === 'on-submit') {
     return <OnSubmitForm />;
   }
@@ -24,6 +31,21 @@ export default function LoginForm({ mode }: LoginFormProps) {
   }
   return <ServerActionForm />;
 }
+
+const NativeHtmlForm = () => {
+  const hydrated = useHydrated();
+
+  return (
+    <form
+      className="space-y-5"
+      data-hydrated={hydrated}
+      action="/login-submit"
+      method="post"
+    >
+      <LoginFields />
+    </form>
+  );
+};
 
 const OnSubmitForm = () => {
   const hydrated = useHydrated();
@@ -38,6 +60,8 @@ const OnSubmitForm = () => {
     <form
       className="space-y-5"
       data-hydrated={hydrated}
+      action="/login-submit"
+      method="post"
       onSubmit={handleSubmit}
     >
       <LoginFields />

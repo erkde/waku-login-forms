@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Page, type Response } from '@playwright/test';
 
 export const credentials = {
   email: 'person@example.com',
@@ -6,6 +6,7 @@ export const credentials = {
 } as const;
 
 export const successMessage = 'Login form submitted successfully.';
+export const nativeSuccessMessage = 'Native form submitted successfully.';
 
 export async function fillLoginForm(page: Page) {
   const emailInput = page.getByLabel('Email address');
@@ -21,28 +22,82 @@ export async function fillLoginForm(page: Page) {
   await expect(rememberCheckbox).toBeChecked();
 }
 
-export async function expectCredentialLeak(page: Page, pathname: string) {
-  await expect(page).toHaveURL((url) => {
-    return (
-      url.pathname === pathname &&
-      url.searchParams.get('email') === credentials.email &&
-      url.searchParams.get('password') === credentials.password &&
-      url.searchParams.get('remember') === 'on'
-    );
-  });
-  await expect(page.getByRole('status')).toHaveCount(0);
+export async function submitAndExpectNativePost(page: Page) {
+  const [request] = await Promise.all([
+    page.waitForRequest((candidate) => {
+      return (
+        candidate.isNavigationRequest() &&
+        new URL(candidate.url()).pathname === '/login-submit'
+      );
+    }),
+    page.getByRole('button', { name: 'Log in' }).click(),
+  ]);
+
+  expect(request.method()).toBe('POST');
+  await expect(page).toHaveURL('/login-submit');
+  await expect(page.getByText(nativeSuccessMessage)).toBeVisible();
 }
 
-export async function delayFormChunk(page: Page, formName: string) {
+export async function expectClientActionReplayListener(page: Page) {
+  const session = await page.context().newCDPSession(page);
+
+  try {
+    const { result: windowObject } = await session.send('Runtime.evaluate', {
+      expression: 'window',
+    });
+
+    if (!windowObject.objectId) {
+      throw new Error('Could not inspect the browser window');
+    }
+
+    await expect
+      .poll(
+        async () => {
+          const { listeners } = await session.send(
+            'DOMDebugger.getEventListeners',
+            { objectId: windowObject.objectId! },
+          );
+
+          return listeners.some((listener) => listener.type === 'submit');
+        },
+        { message: "React's client-action replay listener should be attached" },
+      )
+      .toBe(true);
+  } finally {
+    await session.detach();
+  }
+}
+
+export async function expectClientActionReplayBootstrap(
+  response: Response | null,
+  expected: boolean,
+) {
+  expect(response).not.toBeNull();
+
+  const html = await response!.text();
+  expect(html.includes('$$reactFormReplay')).toBe(expected);
+}
+
+export async function holdFormChunk(page: Page, formName: string) {
   const formChunk = new RegExp(
     `${formName}.*\\.(?:js|tsx)(?:\\?.*)?$`,
   );
 
-  await page.route(
-    formChunk,
-    async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 3_000));
-      await route.continue();
-    },
-  );
+  let reportBlocked!: () => void;
+  let releaseChunk!: () => void;
+
+  const blocked = new Promise<void>((resolve) => {
+    reportBlocked = resolve;
+  });
+  const released = new Promise<void>((resolve) => {
+    releaseChunk = resolve;
+  });
+
+  await page.route(formChunk, async (route) => {
+    reportBlocked();
+    await released;
+    await route.continue();
+  });
+
+  return { blocked, release: releaseChunk };
 }

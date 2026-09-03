@@ -1,11 +1,18 @@
 import { expect, test } from '@playwright/test';
 import {
-  expectCredentialLeak,
   fillLoginForm,
+  submitAndExpectNativePost,
   successMessage,
 } from './login-helpers';
 
 test.use({ javaScriptEnabled: false });
+
+test('native HTML form submits at DOM ready', async ({ page }) => {
+  await page.goto('/login/native-html');
+  await fillLoginForm(page);
+
+  await submitAndExpectNativePost(page);
+});
 
 test('onSubmit uses native form behavior without JavaScript', async ({
   page,
@@ -13,9 +20,7 @@ test('onSubmit uses native form behavior without JavaScript', async ({
   await page.goto('/login/onsubmit');
   await fillLoginForm(page);
 
-  await page.getByRole('button', { name: 'Log in' }).click();
-
-  await expectCredentialLeak(page, '/login/onsubmit');
+  await submitAndExpectNativePost(page);
 });
 
 test('client action cannot submit without JavaScript', async ({ page }) => {
